@@ -1,0 +1,26 @@
+name: attach-release-assets
+
+# One-shot: builds the sdist/wheel from main and attaches them to the v1.0.1
+# release. Runs only for a commit whose message contains [attach-assets].
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    if: contains(github.event.head_commit.message, '[attach-assets]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload v1.0.1 dist/* --clobber --repo "$GITHUB_REPOSITORY"
