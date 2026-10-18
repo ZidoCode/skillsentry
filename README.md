@@ -33,7 +33,7 @@ findings: 2 (critical=1 high=1 medium=0 low=0)
 ```bash
 pip install skillsentry          # once the PyPI queue clears
 # no PyPI needed — install the release wheel
-pip install https://github.com/ZidoCode/skillsentry/releases/download/v0.1.0/skillsentry-0.1.0-py3-none-any.whl
+pip install https://github.com/ZidoCode/skillsentry/releases/download/v1.0.1/skillsentry-0.1.1-py3-none-any.whl
 # or straight from the repo
 pip install git+https://github.com/ZidoCode/skillsentry
 ```
@@ -104,11 +104,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ZidoCode/skillsentry@v1.0.0
+      - uses: ZidoCode/skillsentry@v1.0.1
         with:
           path: skills
           min-severity: high
-      - uses: ZidoCode/skillsentry@v1.0.0
+      - uses: ZidoCode/skillsentry@v1.0.1
         with:
           args: --format sarif -o results.sarif
       - uses: github/codeql-action/upload-sarif@v3
