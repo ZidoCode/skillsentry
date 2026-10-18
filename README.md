@@ -103,11 +103,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ZidoCode/skillsentry@v1
+      - uses: ZidoCode/skillsentry@v1.0.0
         with:
           path: skills
           min-severity: high
-      - uses: ZidoCode/skillsentry@v1
+      - uses: ZidoCode/skillsentry@v1.0.0
         with:
           args: --format sarif -o results.sarif
       - uses: github/codeql-action/upload-sarif@v3
