@@ -154,7 +154,12 @@ def _excluded(rel: str, patterns: Sequence[str]) -> bool:
 
 def _in_skipped_dir(rel: str) -> bool:
     parts = Path(rel).parts[:-1]
-    return any(part in SKIP_DIRS for part in parts)
+    for part in parts:
+        if part in SKIP_DIRS:
+            return True
+        if part.endswith(".egg-info") or part.endswith(".dist-info"):
+            return True
+    return False
 
 
 def _build_skill(
