@@ -30,7 +30,9 @@ findings: 2 (critical=1 high=1 medium=0 low=0)
 ## Install
 
 ```bash
-pip install skillsentry          # once published
+pip install skillsentry          # once the PyPI queue clears
+# no PyPI needed — install the release wheel
+pip install https://github.com/ZidoCode/skillsentry/releases/download/v0.1.0/skillsentry-0.1.0-py3-none-any.whl
 # or straight from the repo
 pip install git+https://github.com/ZidoCode/skillsentry
 ```
