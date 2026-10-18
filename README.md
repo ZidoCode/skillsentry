@@ -1,5 +1,6 @@
 # skillsentry
 
+[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-skillsentry%20scan-8b5cf6?logo=github)](https://github.com/marketplace/actions/skillsentry-scan)
 [![CI](https://github.com/ZidoCode/skillsentry/actions/workflows/ci.yml/badge.svg)](https://github.com/ZidoCode/skillsentry/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/badge/pypi-coming%20soon-lightgrey)](https://pypi.org/project/skillsentry/)
 
