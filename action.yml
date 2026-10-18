@@ -1,4 +1,4 @@
-name: "skillsentry"
+name: "skillsentry scan"
 description: "Gate agent skills and plugins before install: payload scan, capability drift, SARIF output."
 author: "ZidoCode"
 branding:
