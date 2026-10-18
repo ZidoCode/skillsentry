@@ -76,6 +76,16 @@ def test_discover_skips_binary_files(tmp_path: Path):
     assert not any(ref.rel.endswith("blob.bin") for ref in skill.files)
 
 
+def test_discover_skips_build_metadata(tmp_path: Path):
+    skill_dir = tmp_path / "demo"
+    (skill_dir / "demo.egg-info").mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: demo\n---\n")
+    (skill_dir / "demo.egg-info" / "PKG-INFO").write_text("Metadata-Version: 2.1\n")
+
+    skill = discover(tmp_path)[0]
+    assert not any("egg-info" in ref.rel for ref in skill.files)
+
+
 def test_single_file_scan(tmp_path: Path):
     script = tmp_path / "install.sh"
     script.write_text("echo hi\n")
