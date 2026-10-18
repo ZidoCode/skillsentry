@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-MAX_FILE_BYTES = 1_500_000
+MAX_FILE_BYTES = 8 * 1024 * 1024
 
 SKIP_DIRS = {
     ".git",
@@ -27,6 +27,14 @@ SKIP_DIRS = {
 }
 
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
+BINARY_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".pdf",
+    ".zip", ".gz", ".bz2", ".xz", ".tar", ".7z", ".whl",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot",
+    ".mp3", ".mp4", ".mov", ".webm", ".wav", ".ogg",
+    ".so", ".dylib", ".dll", ".exe", ".pyc", ".class", ".jar",
+    ".sqlite", ".db",
+}
 SCRIPT_SUFFIXES = {
     ".py",
     ".js",
@@ -68,6 +76,7 @@ class Skill:
     entry: Path
     frontmatter: Dict[str, object] = field(default_factory=dict)
     files: List[FileRef] = field(default_factory=list)
+    skipped: List[str] = field(default_factory=list)
 
     @property
     def entry_rel(self) -> str:
@@ -130,6 +139,34 @@ def _kind_for(path: Path) -> str:
     return "other"
 
 
+def _decode(raw: bytes) -> Optional[str]:
+    """Decode a skill file, honouring UTF-16/32 BOMs.
+
+    A skill that ships UTF-16 scripts would otherwise read as mojibake and
+    slip past every regex rule, so the BOM and the NUL pattern both get a
+    chance before the file is written off as binary.
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig", "replace")
+    if raw.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+        return raw.decode("utf-32", "replace")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16", "replace")
+    if b"\x00" in raw[:8192]:
+        for encoding in ("utf-16-le", "utf-16-be"):
+            try:
+                text = raw.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            if "\x00" not in text:
+                return text
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("utf-8", "replace")
+
+
 def _read_text(path: Path) -> Optional[str]:
     try:
         if path.stat().st_size > MAX_FILE_BYTES:
@@ -137,12 +174,7 @@ def _read_text(path: Path) -> Optional[str]:
         raw = path.read_bytes()
     except OSError:
         return None
-    if b"\x00" in raw[:4096]:
-        return None
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return raw.decode("utf-8", "replace")
+    return _decode(raw)
 
 
 def _excluded(rel: str, patterns: Sequence[str]) -> bool:
@@ -184,7 +216,16 @@ def _build_skill(
     else:
         candidates = sorted(p for p in root.rglob("*") if p.is_file())
 
+    # A skill nested inside another skill owns its own files; without this the
+    # outer skill re-reports them and every finding shows up twice.
+    nested_roots: List[Path] = []
+    if single_file is None:
+        for manifest in root.rglob("SKILL.md"):
+            if manifest.parent != root:
+                nested_roots.append(manifest.parent)
+
     files: List[FileRef] = []
+    skipped: List[str] = []
     for path in candidates:
         try:
             rel = path.relative_to(base).as_posix()
@@ -192,12 +233,30 @@ def _build_skill(
             rel = path.name
         if _excluded(rel, excludes) or _in_skipped_dir(rel):
             continue
+        if any(root_path in path.parents for root_path in nested_roots):
+            continue
+        try:
+            too_big = path.stat().st_size > MAX_FILE_BYTES
+        except OSError:
+            too_big = False
         text = _read_text(path)
         if text is None:
+            if path.suffix.lower() not in BINARY_SUFFIXES:
+                skipped.append(rel)
+            continue
+        if too_big:
+            skipped.append(rel)
             continue
         files.append(FileRef(path=path, rel=rel, kind=_kind_for(path), text=text))
 
-    return Skill(root=root, name=str(name), entry=entry or root, frontmatter=frontmatter, files=files)
+    return Skill(
+        root=root,
+        name=str(name),
+        entry=entry or root,
+        frontmatter=frontmatter,
+        files=files,
+        skipped=skipped,
+    )
 
 
 def discover(path: str | Path, excludes: Sequence[str] = ()) -> List[Skill]:

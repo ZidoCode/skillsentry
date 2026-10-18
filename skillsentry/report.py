@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from typing import Dict, List
+from urllib.parse import quote
 
+from . import __version__
 from .models import Finding, Severity
 from .rules import RULES
 from .scan import ScanResult
@@ -13,7 +17,7 @@ _FORMATS = ("text", "json", "sarif")
 
 
 def _safe_uri(path: str) -> str:
-    return path.replace("\\", "/")
+    return quote(path.replace("\\", "/"), safe="/")
 
 
 def render_text(result: ScanResult) -> str:
@@ -34,6 +38,11 @@ def render_text(result: ScanResult) -> str:
     if result.suppressed:
         summary += ", suppressed=%d" % result.suppressed
     lines.append(summary)
+    if result.skipped_files:
+        lines.append(
+            "  skipped %d file(s) that could not be read as text: %s"
+            % (len(result.skipped_files), ", ".join(result.skipped_files[:5]))
+        )
 
     for finding in result.findings:
         lines.append("")
@@ -60,6 +69,7 @@ def as_dict(result: ScanResult) -> Dict[str, object]:
         "files_scanned": result.files_scanned,
         "rules_run": result.rules_run,
         "suppressed": result.suppressed,
+        "skipped_files": result.skipped_files,
         "summary": result.counts(),
         "findings": [finding.as_dict() for finding in result.findings],
     }
@@ -83,24 +93,43 @@ def render_sarif(result: ScanResult) -> str:
         if rule.id in used_rules or not used_rules
     ]
 
+    rule_index = {rule["id"]: index for index, rule in enumerate(rules)}
+    workspace = Path(os.getcwd()).resolve()
+
     results = []
     for finding in result.findings:
-        results.append(
-            {
-                "ruleId": finding.rule,
-                "level": _sarif_level(finding.severity),
-                "message": {"text": "%s — %s" % (finding.message, finding.hint) if finding.hint else finding.message},
-                "partialFingerprints": {"skillsentry/v1": finding.fingerprint},
-                "locations": [
-                    {
-                        "physicalLocation": {
-                            "artifactLocation": {"uri": _safe_uri(finding.path)},
-                            "region": {"startLine": max(1, finding.line)},
-                        }
+        uri = _workspace_relative(finding.path, result.root, workspace)
+        entry = {
+            "ruleId": finding.rule,
+            "level": _sarif_level(finding.severity),
+            "message": {"text": "%s — %s" % (finding.message, finding.hint) if finding.hint else finding.message},
+            "partialFingerprints": {"skillsentry/v1": finding.fingerprint},
+            "locations": [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": _safe_uri(uri),
+                            "uriBaseId": "%SRCROOT%",
+                        },
+                        "region": {"startLine": max(1, finding.line)},
                     }
-                ],
+                }
+            ],
+        }
+        if finding.rule in rule_index:
+            entry["ruleIndex"] = rule_index[finding.rule]
+        results.append(entry)
+
+    invocation = {"executionSuccessful": True}
+    if result.skipped_files:
+        invocation["toolExecutionNotifications"] = [
+            {
+                "level": "warning",
+                "message": {"text": "not scanned (binary, unreadable or larger than 8 MiB): %s" % rel},
+                "descriptor": {"id": "SKIPPED_FILE"},
             }
-        )
+            for rel in result.skipped_files
+        ]
 
     document = {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -110,15 +139,33 @@ def render_sarif(result: ScanResult) -> str:
                 "tool": {
                     "driver": {
                         "name": "skillsentry",
+                        "version": __version__,
+                        "semanticVersion": __version__,
                         "informationUri": "https://github.com/ZidoCode/skillsentry",
                         "rules": rules,
                     }
                 },
+                "automationDetails": {"id": "skillsentry"},
+                "originalUriBaseIds": {
+                    "%SRCROOT%": {"uri": workspace.as_uri() + "/"},
+                },
+                "invocations": [invocation],
                 "results": results,
             }
         ],
     }
     return json.dumps(document, indent=2, ensure_ascii=False)
+
+
+def _workspace_relative(path: str, scan_root: str, workspace: Path) -> str:
+    """Express a finding path relative to the checkout root when possible."""
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = Path(scan_root) / candidate
+    try:
+        return candidate.resolve().relative_to(workspace).as_posix()
+    except (ValueError, OSError):
+        return path.replace("\\", "/")
 
 
 def _sarif_level(severity: Severity) -> str:

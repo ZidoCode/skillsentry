@@ -123,7 +123,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     body = render(result, args.format)
     if args.output:
-        Path(args.output).expanduser().write_text(body + "\n", encoding="utf-8")
+        destination = Path(args.output).expanduser()
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(body + "\n", encoding="utf-8")
+        except OSError as exc:
+            print("skillsentry: cannot write %s: %s" % (destination, exc), file=sys.stderr)
+            return EXIT_USAGE
     else:
         print(body)
 

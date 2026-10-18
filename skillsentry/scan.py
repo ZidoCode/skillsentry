@@ -22,6 +22,11 @@ class ScanResult:
     rules_run: int = 0
 
     @property
+    def skipped_files(self) -> List[str]:
+        """Files that could not be read (binary, unreadable or oversized)."""
+        return [rel for skill in self.skills for rel in skill.skipped]
+
+    @property
     def files_scanned(self) -> int:
         seen = set()
         for skill in self.skills:
